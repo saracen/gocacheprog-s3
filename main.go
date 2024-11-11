@@ -27,13 +27,16 @@ var userCacheDir, _ = os.UserCacheDir()
 var defaultLocalCacheDir = filepath.Join(userCacheDir, "go-cacher")
 
 var (
-	flagVerbose       = flag.Int("v", 0, "logging verbosity; 0=error, 1=warn, 2=info, 3=debug, 4=trace")
-	flagS3Prefix      = flag.String("s3-prefix", defaultS3Prefix, "s3 prefix")
-	flagLocalCacheDir = flag.String("local-cache-dir", defaultLocalCacheDir, "local cache directory")
-	bucket            string
-	flagQueueLen      = flag.Int("queue-len", 0, "length of the queue for async s3 cache (0=synchronous)")
-	flagWorkers       = flag.Int("workers", 1, "number of workers for async s3 cache (1=synchronous)")
-	flagMetCSV        = flag.String("metrics-csv", "", "write s3 Get/Put metrics to a CSV file (empty=disabled)")
+	flagVerbose            = flag.Int("v", 0, "logging verbosity; 0=error, 1=warn, 2=info, 3=debug, 4=trace")
+	flagS3Prefix           = flag.String("s3-prefix", defaultS3Prefix, "s3 prefix")
+	flagLocalCacheDir      = flag.String("local-cache-dir", defaultLocalCacheDir, "local cache directory")
+	bucket                 string
+	flagQueueLen           = flag.Int("queue-len", 0, "length of the queue for async s3 cache (0=synchronous)")
+	flagWorkers            = flag.Int("workers", 1, "number of workers for async s3 cache (1=synchronous)")
+	flagMetCSV             = flag.String("metrics-csv", "", "write s3 Get/Put metrics to a CSV file (empty=disabled)")
+	flagAWSProfile         = flag.String("aws-profile", "", "aws profile")
+	flagAWSConfigFile      = flag.String("aws-config-file", "", "aws config file")
+	flagAWSCredentialsFile = flag.String("aws-credential-file", "", "aws credential file")
 )
 
 // logHandler implements slog.Handler to print logs nicely
@@ -137,10 +140,25 @@ func main() {
 	if logLevel <= levelTrace {
 		clientLogMode = aws.LogRetries | aws.LogRequest
 	}
-	awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithClientLogMode(clientLogMode), config.WithLogger(h))
+	
+	opts := []func(*config.LoadOptions) error {
+		config.WithClientLogMode(clientLogMode),
+		config.WithLogger(h),
+	}
+	if *flagAWSProfile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(*flagAWSProfile))
+	}
+	if *flagAWSConfigFile != "" {
+		opts = append(opts, config.WithSharedConfigFiles([]string{*flagAWSConfigFile}))
+	}
+	if *flagAWSCredentialsFile != "" {
+		opts = append(opts, config.WithSharedCredentialsFiles([]string{*flagAWSCredentialsFile}))
+	}
+	awsConfig, err := config.LoadDefaultConfig(context.TODO(), opts...)
 	if err != nil {
 		log.Fatal("S3 cache disabled; failed to load AWS config: ", err)
 	}
+	
 	diskCacher := NewDiskCache(*flagLocalCacheDir)
 	cacher := NewDiskAsyncS3Cache(
 		diskCacher,
