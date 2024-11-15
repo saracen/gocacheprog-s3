@@ -165,7 +165,13 @@ func writeAtomic(dest string, r io.Reader) (int64, error) {
 		}
 	}()
 	if err = os.Rename(tempFile, dest); err != nil {
-		return 0, err
+		_, err := os.Stat(dest)
+		if err == nil {
+			log.Println(tempFile, err, "reason: already exists on disk")
+		} else {
+			log.Println(tempFile, err)
+		}
+		return size, nil
 	}
 	return size, nil
 }
