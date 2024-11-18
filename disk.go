@@ -88,23 +88,26 @@ func (c *DiskCache) Put(_ context.Context, actionID, objectID string, size int64
 	c.log.Debug("put", "actionID", actionID, "objectID", objectID, "size", size)
 	file := filepath.Join(c.dir, fmt.Sprintf("o-%s", objectID))
 
-	// Special case empty files; they're both common and easier to do race-free.
-	if size == 0 {
-		zf, err := os.OpenFile(file, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
-		if err != nil {
-			c.Counts.putErrors.Add(1)
-			return "", err
-		}
-		_ = zf.Close()
-	} else {
-		wrote, err := writeAtomic(file, body)
-		if err != nil {
-			c.Counts.putErrors.Add(1)
-			return "", err
-		}
-		if wrote != size {
-			c.Counts.putErrors.Add(1)
-			return "", fmt.Errorf("wrote %d bytes, expected %d", wrote, size)
+	_, err := os.Stat(file)
+	if err != nil {
+		// Special case empty files; they're both common and easier to do race-free.
+		if size == 0 {
+			zf, err := os.OpenFile(file, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+			if err != nil {
+				c.Counts.putErrors.Add(1)
+				return "", err
+			}
+			_ = zf.Close()
+		} else {
+			wrote, err := writeAtomic(file, body)
+			if err != nil {
+				c.Counts.putErrors.Add(1)
+				return "", err
+			}
+			if wrote != size {
+				c.Counts.putErrors.Add(1)
+				return "", fmt.Errorf("wrote %d bytes, expected %d", wrote, size)
+			}
 		}
 	}
 
